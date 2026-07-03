@@ -5,6 +5,8 @@ import { APIError } from '#server/errors';
 import { isMutating, runHandler } from '#server/mutators';
 
 import type * as T from './index-types';
+import { safePost } from './shared';
+import type { Message } from './shared';
 
 function getGlobalObject() {
   const obj =
@@ -35,6 +37,10 @@ export const init: T.Init = function (serverChn, handlers) {
   const serverChannel = serverChn as Window;
   getGlobalObject().__globalServerChannel = serverChannel;
 
+  function post(msg: Message) {
+    safePost(m => serverChannel.postMessage(m), msg);
+  }
+
   serverChannel.addEventListener(
     'message',
     e => {
@@ -57,7 +63,7 @@ export const init: T.Init = function (serverChn, handlers) {
       if (handlers[name]) {
         runHandler(handlers[name], args, { undoTag, name }).then(
           result => {
-            serverChannel.postMessage({
+            post({
               type: 'reply',
               id,
               result: catchErrors ? { data: result, error: null } : result,
@@ -71,15 +77,15 @@ export const init: T.Init = function (serverChn, handlers) {
             if (name.startsWith('api/')) {
               // The API is newer and does automatically forward
               // errors
-              serverChannel.postMessage({ type: 'reply', id, error });
+              post({ type: 'reply', id, error });
             } else if (catchErrors) {
-              serverChannel.postMessage({
+              post({
                 type: 'reply',
                 id,
                 result: { error, data: null },
               });
             } else {
-              serverChannel.postMessage({ type: 'error', id, error });
+              post({ type: 'error', id, error });
             }
 
             // Only report internal errors
@@ -99,13 +105,13 @@ export const init: T.Init = function (serverChn, handlers) {
         const unknownMethodError = APIError('Unknown server method: ' + name);
 
         if (catchErrors) {
-          serverChannel.postMessage({
+          post({
             type: 'reply',
             id,
             result: { error: unknownMethodError, data: null },
           });
         } else {
-          serverChannel.postMessage({
+          post({
             type: 'error',
             id,
             error: unknownMethodError,
