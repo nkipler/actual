@@ -3,4 +3,4 @@ category: Bugfix
 authors: [MatissJanis]
 ---
 
-Fix custom `dataDir` paths in the API browser build, and report the real cause when a background operation fails instead of a cryptic "DataCloneError"
+Fix using a custom data directory in the browser version of the API, and show the real error message when something goes wrong in the background

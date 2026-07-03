@@ -22,7 +22,8 @@ export { join };
 export { getDocumentDir, getBudgetDir } from './shared';
 export const getDataDir = () => process.env.ACTUAL_DATA_DIR;
 
-const persistedRoots = new Set(['/documents']);
+// The active document dir is persisted alongside the built-in /documents
+let customPersistedRoot: string | null = null;
 
 function normalizePath(filepath: string): string {
   const absolute = filepath.startsWith('/') ? filepath : '/' + filepath;
@@ -33,20 +34,22 @@ function normalizePath(filepath: string): string {
   return absolute.slice(0, end);
 }
 
+function isUnderRoot(path: string, root: string): boolean {
+  return path === root || path.startsWith(root + '/');
+}
+
 function isPersistedPath(filepath: string): boolean {
   const path = normalizePath(filepath);
-  for (const root of persistedRoots) {
-    if (path === root || path.startsWith(root + '/')) {
-      return true;
-    }
-  }
-  return false;
+  return (
+    isUnderRoot(path, '/documents') ||
+    (customPersistedRoot != null && isUnderRoot(path, customPersistedRoot))
+  );
 }
 
 export const _setDocumentDir = dir => {
   const normalized = typeof dir === 'string' ? normalizePath(dir) : '';
   if (normalized !== '') {
-    persistedRoots.add(normalized);
+    customPersistedRoot = normalized;
     if (FS) {
       _mkdirRecursively(normalized);
     }

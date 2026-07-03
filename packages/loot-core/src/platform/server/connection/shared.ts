@@ -52,18 +52,22 @@ export function safePost(post: (msg: unknown) => void, msg: Message): void {
     try {
       post(JSON.parse(JSON.stringify(msg, errorReplacer)));
     } catch {
-      post({
-        type: 'error',
-        id: msg.id,
-        error: {
-          type: 'ServerError',
-          message:
-            'Failed to serialize server response: ' +
-            (postError instanceof Error
-              ? postError.message
-              : String(postError)),
-        },
-      });
+      try {
+        post({
+          type: 'error',
+          id: msg.id,
+          error: {
+            type: 'ServerError',
+            message:
+              'Failed to serialize server response: ' +
+              (postError instanceof Error
+                ? postError.message
+                : String(postError)),
+          },
+        });
+      } catch {
+        // The channel itself is broken; there is no way to report anything
+      }
     }
   }
 }
