@@ -293,6 +293,44 @@ describe('Account sync', () => {
     expect(payees[0].id).toBe(payeeId);
   });
 
+  // Regression test for https://github.com/actualbudget/actual/issues/8401
+  test('reconcile keeps imported transactions in the target account', async () => {
+    // The (off-budget) account we import into, matching the reported scenario.
+    const acctId = await db.insertAccount({
+      id: 'savings',
+      name: 'Savings',
+      offbudget: 1,
+    });
+    // Another account that a rule will try to reassign the transaction into.
+    const otherAcctId = await db.insertAccount({
+      id: 'checking',
+      name: 'Checking',
+      offbudget: 0,
+    });
+
+    const payeeId = await db.insertPayee({ name: 'Interest' });
+
+    // `runRules` runs during reconciliation and can reassign the account (a
+    // "set account" rule here). Importing must still pin the transaction to
+    // the account it is imported into - otherwise the transaction silently
+    // ends up outside that account's register (the reported "no account"
+    // symptom). `addTransactions` already guards against this.
+    await insertRule({
+      stage: null,
+      conditionsOp: 'and',
+      conditions: [{ op: 'is', field: 'payee', value: payeeId }],
+      actions: [{ op: 'set', field: 'account', value: otherAcctId }],
+    });
+
+    await reconcileTransactions(acctId, [
+      { date: '2020-01-02', payee_name: 'Interest', amount: 4133 },
+    ]);
+
+    const transactions = await getAllTransactions();
+    expect(transactions.length).toBe(1);
+    expect(transactions[0].account).toBe(acctId);
+  });
+
   test('reconcile avoids creating blank payees', async () => {
     const { id: acctId } = await prepareDatabase();
 

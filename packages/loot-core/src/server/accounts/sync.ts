@@ -713,6 +713,11 @@ export async function reconcileTransactions(
       const finalTransaction = {
         ...newTrans,
         id: uuidv4(),
+        // Always pin the transaction to the account it is being imported
+        // into. `runRules` (above) can otherwise reassign `account` (e.g. a
+        // "set account" rule), which would silently drop the transaction out
+        // of the target account. `addTransactions` does the same.
+        account: acctId,
         category: trans.category || null,
         cleared: trans.cleared ?? defaultCleared,
       };
