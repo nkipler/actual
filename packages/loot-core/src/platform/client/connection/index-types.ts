@@ -30,6 +30,11 @@ export declare function send<K extends keyof Handlers>(
       error: {
         type: 'APIError' | 'ServerError';
         message: string;
+        name?: string;
+        /** Stable code for common failures (see `#shared/transferable-error`). */
+        code?: string | number;
+        reason?: string;
+        stack?: string;
         cause?: unknown;
       };
     }
@@ -59,6 +64,11 @@ export declare function sendCatch<K extends keyof Handlers>(
       error: {
         type: 'APIError' | 'ServerError';
         message: string;
+        name?: string;
+        /** Stable code for common failures (see `#shared/transferable-error`). */
+        code?: string | number;
+        reason?: string;
+        stack?: string;
         cause?: unknown;
       };
     }

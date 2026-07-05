@@ -3,6 +3,7 @@ import { logger } from '#platform/server/log';
 // @ts-strict-ignore
 import { APIError } from '#server/errors';
 import { isMutating, runHandler } from '#server/mutators';
+import { coerceError, postWithFallback } from '#shared/transferable-error';
 
 import type * as T from './index-types';
 
@@ -22,14 +23,6 @@ function getGlobalObject() {
 }
 
 getGlobalObject().__globalServerChannel = null;
-
-function coerceError(error) {
-  if (error.type && error.type === 'APIError') {
-    return error;
-  }
-
-  return { type: 'ServerError', message: error.message, cause: error };
-}
 
 export const init: T.Init = function (serverChn, handlers) {
   const serverChannel = serverChn as Window;
@@ -54,16 +47,25 @@ export const init: T.Init = function (serverChn, handlers) {
 
       const { id, name, args, undoTag, catchErrors } = msg;
 
+      // Post via `postWithFallback` so a payload that cannot be
+      // structured-cloned never masks the original result/error with a
+      // `DataCloneError` thrown inside the worker.
+      const post = message => serverChannel.postMessage(message);
+
       if (handlers[name]) {
         runHandler(handlers[name], args, { undoTag, name }).then(
           result => {
-            serverChannel.postMessage({
-              type: 'reply',
-              id,
-              result: catchErrors ? { data: result, error: null } : result,
-              mutated: isMutating(handlers[name]),
-              undoTag,
-            });
+            postWithFallback(
+              post,
+              {
+                type: 'reply',
+                id,
+                result: catchErrors ? { data: result, error: null } : result,
+                mutated: isMutating(handlers[name]),
+                undoTag,
+              },
+              catchErrors,
+            );
           },
           nativeError => {
             const error = coerceError(nativeError);
@@ -71,15 +73,19 @@ export const init: T.Init = function (serverChn, handlers) {
             if (name.startsWith('api/')) {
               // The API is newer and does automatically forward
               // errors
-              serverChannel.postMessage({ type: 'reply', id, error });
+              postWithFallback(post, { type: 'reply', id, error }, false);
             } else if (catchErrors) {
-              serverChannel.postMessage({
-                type: 'reply',
-                id,
-                result: { error, data: null },
-              });
+              postWithFallback(
+                post,
+                {
+                  type: 'reply',
+                  id,
+                  result: { error, data: null },
+                },
+                catchErrors,
+              );
             } else {
-              serverChannel.postMessage({ type: 'error', id, error });
+              postWithFallback(post, { type: 'error', id, error }, false);
             }
 
             // Only report internal errors

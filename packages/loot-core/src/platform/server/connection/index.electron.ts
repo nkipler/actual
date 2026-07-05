@@ -3,20 +3,18 @@ import { captureException } from '#platform/exceptions';
 import { logger } from '#platform/server/log';
 import { APIError } from '#server/errors';
 import { isMutating, runHandler } from '#server/mutators';
+import { coerceError, postWithFallback } from '#shared/transferable-error';
 
 import type * as T from './index-types';
-
-function coerceError(error) {
-  if (error.type && error.type === 'APIError') {
-    return error;
-  }
-
-  return { type: 'ServerError', message: error.message, cause: error };
-}
 
 export const init: T.Init = function (_socketName, handlers) {
   process.parentPort.on('message', ({ data }) => {
     const { id, name, args, undoTag, catchErrors } = data;
+
+    // Post via `postWithFallback` so a payload that cannot be
+    // structured-cloned never masks the original result/error with a
+    // `DataCloneError` thrown inside the backend process.
+    const post = message => process.parentPort.postMessage(message);
 
     if (handlers[name]) {
       runHandler(handlers[name], args, { undoTag, name }).then(
@@ -25,14 +23,20 @@ export const init: T.Init = function (_socketName, handlers) {
             result = { data: result, error: null };
           }
 
-          process.parentPort.postMessage({
-            type: 'reply',
-            id,
-            result,
-            mutated:
-              isMutating(handlers[name]) && name !== 'undo' && name !== 'redo',
-            undoTag,
-          });
+          postWithFallback(
+            post,
+            {
+              type: 'reply',
+              id,
+              result,
+              mutated:
+                isMutating(handlers[name]) &&
+                name !== 'undo' &&
+                name !== 'redo',
+              undoTag,
+            },
+            catchErrors,
+          );
         },
         nativeError => {
           const error = coerceError(nativeError);
@@ -40,19 +44,19 @@ export const init: T.Init = function (_socketName, handlers) {
           if (name.startsWith('api/')) {
             // The API is newer and does automatically forward
             // errors
-            process.parentPort.postMessage({
-              type: 'reply',
-              id,
-              error,
-            });
+            postWithFallback(post, { type: 'reply', id, error }, false);
           } else if (catchErrors) {
-            process.parentPort.postMessage({
-              type: 'reply',
-              id,
-              result: { error, data: null },
-            });
+            postWithFallback(
+              post,
+              {
+                type: 'reply',
+                id,
+                result: { error, data: null },
+              },
+              catchErrors,
+            );
           } else {
-            process.parentPort.postMessage({ type: 'error', id, error });
+            postWithFallback(post, { type: 'error', id, error }, false);
           }
 
           if (error.type === 'ServerError' && name !== 'api/load-budget') {

@@ -16,6 +16,7 @@ import {
   ungroupTransactions,
   updateTransaction,
 } from '#shared/transactions';
+import { getStableErrorCode } from '#shared/transferable-error';
 import { integerToAmount } from '#shared/util';
 import type { Handlers } from '#types/handlers';
 import type {
@@ -49,6 +50,18 @@ import * as sheet from './sheet';
 import { batchMessages, setSyncingMode } from './sync';
 
 let IMPORT_MODE = false;
+
+// Attach the semantic reason (and its stable code, when it has one) to a
+// thrown error so consumers can branch on `error.code`/`error.reason` instead
+// of matching the human-readable message text.
+function errorWithReason(message: string, reason?: string): Error {
+  const error = new Error(message);
+  if (reason) {
+    const code = getStableErrorCode(reason);
+    Object.assign(error, code ? { reason, code } : { reason });
+  }
+  return error;
+}
 
 // The API is different in two ways: we never want undo enabled, and
 // we also need to notify the UI manually if stuff has changed (if
@@ -170,7 +183,7 @@ handlers['api/load-budget'] = async function ({ id }) {
     } else {
       connection.send('show-budgets');
 
-      throw new Error(getSyncError(error, id));
+      throw errorWithReason(getSyncError(error, id), error);
     }
   }
 };
@@ -193,8 +206,9 @@ handlers['api/download-budget'] = async function ({ syncId, password }) {
     }
     const file = files.find(f => f.groupId === syncId);
     if (!file) {
-      throw new Error(
+      throw errorWithReason(
         `Budget "${syncId}" not found. Check the sync id of your budget in the Advanced section of the settings page.`,
+        'budget-not-found',
       );
     }
 
@@ -206,8 +220,9 @@ handlers['api/download-budget'] = async function ({ syncId, password }) {
   // Set the e2e encryption keys
   if (activeFile.encryptKeyId) {
     if (!password) {
-      throw new Error(
+      throw errorWithReason(
         `File ${activeFile.name} is encrypted. Please provide a password.`,
+        'missing-key',
       );
     }
 
@@ -216,7 +231,7 @@ handlers['api/download-budget'] = async function ({ syncId, password }) {
       password,
     });
     if (result.error) {
-      throw new Error(getTestKeyError(result.error));
+      throw errorWithReason(getTestKeyError(result.error), result.error.reason);
     }
   }
 
@@ -225,8 +240,9 @@ handlers['api/download-budget'] = async function ({ syncId, password }) {
     await handlers['load-budget']({ id: localBudget.id });
     const result = await handlers['sync-budget']();
     if (result.error) {
-      throw new Error(
+      throw errorWithReason(
         getSyncError(result.error.reason, localBudget.id, result.error.meta),
+        result.error.reason,
       );
     }
     return;
@@ -238,7 +254,7 @@ handlers['api/download-budget'] = async function ({ syncId, password }) {
   });
   if (result.error) {
     logger.log('Full error details', result.error);
-    throw new Error(getDownloadError(result.error));
+    throw errorWithReason(getDownloadError(result.error), result.error.reason);
   }
   await handlers['load-budget']({ id: result.id });
 };
@@ -256,7 +272,10 @@ handlers['api/sync'] = async function () {
   const { id } = prefs.getPrefs();
   const result = await handlers['sync-budget']();
   if (result.error) {
-    throw new Error(getSyncError(result.error.reason, id, result.error.meta));
+    throw errorWithReason(
+      getSyncError(result.error.reason, id, result.error.meta),
+      result.error.reason,
+    );
   }
 };
 
@@ -295,7 +314,15 @@ handlers['api/bank-sync'] = async function (args) {
 
   const errors = allErrors.filter(e => e != null);
   if (errors.length > 0) {
-    throw new Error(getBankSyncError(errors[0]));
+    const [firstError] = errors;
+    // Bank-sync errors already carry semantic `category`/`code` fields;
+    // forward them on the thrown error.
+    throw Object.assign(new Error(getBankSyncError(firstError)), {
+      ...(firstError.category !== undefined
+        ? { category: firstError.category }
+        : {}),
+      ...(firstError.code !== undefined ? { code: firstError.code } : {}),
+    });
   }
 };
 

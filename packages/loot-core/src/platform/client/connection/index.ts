@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import * as undo from '#platform/client/undo';
 import { captureBreadcrumb, captureException } from '#platform/exceptions';
+import { rehydrateError } from '#shared/transferable-error';
 
 import type * as T from './index-types';
 
@@ -47,7 +48,7 @@ function handleMessage(msg) {
     const handler = replyHandlers.get(id);
     if (handler) {
       replyHandlers.delete(id);
-      handler.reject(error);
+      handler.reject(rehydrateError(error));
     }
   } else if (msg.type === 'reply') {
     const { id, result, mutated, undoTag, error } = msg;
@@ -62,7 +63,7 @@ function handleMessage(msg) {
 
       // api/* failures arrive as a reply carrying `error`.
       if (error) {
-        handler.reject(error);
+        handler.reject(rehydrateError(error));
       } else {
         handler.resolve(result);
       }
