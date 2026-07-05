@@ -30,6 +30,9 @@ export declare function send<K extends keyof Handlers>(
       error: {
         type: 'APIError' | 'ServerError';
         message: string;
+        /** Stable, machine-readable failure code (e.g. 'network-failure') */
+        code?: string;
+        name?: string;
         cause?: unknown;
       };
     }
@@ -59,6 +62,9 @@ export declare function sendCatch<K extends keyof Handlers>(
       error: {
         type: 'APIError' | 'ServerError';
         message: string;
+        /** Stable, machine-readable failure code (e.g. 'network-failure') */
+        code?: string;
+        name?: string;
         cause?: unknown;
       };
     }

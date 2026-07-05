@@ -4,6 +4,7 @@ import { logger } from '#platform/server/log';
 import { APIError } from '#server/errors';
 import { isMutating, runHandler } from '#server/mutators';
 
+import { coerceError, postError } from './errors';
 import type * as T from './index-types';
 
 function getGlobalObject() {
@@ -22,14 +23,6 @@ function getGlobalObject() {
 }
 
 getGlobalObject().__globalServerChannel = null;
-
-function coerceError(error) {
-  if (error.type && error.type === 'APIError') {
-    return error;
-  }
-
-  return { type: 'ServerError', message: error.message, cause: error };
-}
 
 export const init: T.Init = function (serverChn, handlers) {
   const serverChannel = serverChn as Window;
@@ -67,19 +60,32 @@ export const init: T.Init = function (serverChn, handlers) {
           },
           nativeError => {
             const error = coerceError(nativeError);
+            const post = message => serverChannel.postMessage(message);
 
             if (name.startsWith('api/')) {
               // The API is newer and does automatically forward
               // errors
-              serverChannel.postMessage({ type: 'reply', id, error });
+              postError(
+                post,
+                err => ({ type: 'reply', id, error: err }),
+                error,
+              );
             } else if (catchErrors) {
-              serverChannel.postMessage({
-                type: 'reply',
-                id,
-                result: { error, data: null },
-              });
+              postError(
+                post,
+                err => ({
+                  type: 'reply',
+                  id,
+                  result: { error: err, data: null },
+                }),
+                error,
+              );
             } else {
-              serverChannel.postMessage({ type: 'error', id, error });
+              postError(
+                post,
+                err => ({ type: 'error', id, error: err }),
+                error,
+              );
             }
 
             // Only report internal errors
