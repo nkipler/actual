@@ -10,7 +10,11 @@
   },
   "scripts": {
     "scan": "tsx src/index.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22.6"
   },
   "dependencies": {
     "@actual-app/api": ">=25.0.0",

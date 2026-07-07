@@ -30,66 +30,126 @@ to map each line item to one of them, so splits land in the right budget
 categories automatically. Unmatched categories are left uncategorized (and
 reported), never guessed into the wrong bucket.
 
-## Setup
+---
 
-This is a standalone tool; it is **not** part of the Actual yarn workspaces, so
-it never touches the monorepo build. Install its own dependencies:
+## Before you start (read this first)
+
+**1. You need a Mistral API key.** Create an account at
+[console.mistral.ai](https://console.mistral.ai/), add billing, and create an API
+key. Mistral OCR and the small model used here are **paid** (a receipt costs a
+fraction of a cent, but it is not free). Never share or commit this key.
+
+**2. Direct import (`--import`) requires an Actual *sync server*.** The API can
+only write into a budget that lives on a server — it cannot reach a budget you
+only opened locally in your browser. You have a sync server if you log into
+Actual with a URL and a password. If you don't have one yet, see
+[Actual's server setup guide](https://actualbudget.org/docs/install/). Once you
+have it you need three things from Actual → **Settings**:
+
+- the **server URL** (e.g. `https://actual.example.com`)
+- your **server password**
+- the budget's **Sync ID** (Settings → **Advanced settings** → "Sync ID")
+
+If you don't want to import automatically, you can skip the server entirely and
+just generate a JSON file with `--json` to inspect the result.
+
+**3. This tool is standalone.** It is *not* part of the Actual yarn workspaces,
+so it never touches the main app's build. It has its own dependencies.
+
+---
+
+## Setup
 
 ```bash
 cd tools/receipt-scanner
-npm install          # or: yarn install / pnpm install
-cp .env.example .env # then fill it in
+npm install                 # installs this tool's own dependencies
+cp .env.example .env        # then open .env and fill it in
 ```
 
-Fill in `.env`:
+Open `.env` in a text editor and fill in the values (each one is explained in the
+file). At minimum you need `MISTRAL_API_KEY`. The `ACTUAL_*` values are only
+needed if you want to import automatically with `--import`.
 
-- `MISTRAL_API_KEY` — required for OCR + extraction ([get one](https://console.mistral.ai/)).
-- `ACTUAL_SERVER_URL`, `ACTUAL_PASSWORD`, `ACTUAL_SYNC_ID` — only needed for
-  `--import` (direct import into your budget). `ACTUAL_SYNC_ID` is under
-  Actual → Settings → Advanced → "Sync ID".
-- `ACTUAL_E2E_PASSWORD` — only if your budget is end-to-end encrypted.
+`.env` is git-ignored, so your keys never get committed.
 
-## Usage
+---
+
+## First run (step by step)
+
+**Step 1 — just look at what it reads (no key spending on Actual, no writes):**
 
 ```bash
-# 1) Preview: OCR + extraction, print the split, no writes
-npm run scan -- receipt.jpg
-
-# 2) Save the built transaction as JSON (and/or a flat CSV of line items)
-npm run scan -- receipt.pdf --json out.json --csv items.csv
-
-# 3) Import straight into Actual as a split transaction
-npm run scan -- receipt.jpg --account "Checking" --import
-
-# Dry run the import (shows what would happen, writes nothing)
-npm run scan -- receipt.jpg --account "Checking" --import --dry-run
-
-# Several receipts at once
-npm run scan -- receipts/*.jpg --account "Checking" --import
+npm run scan -- path/to/receipt.jpg
 ```
 
-### Options
+This runs OCR + extraction and prints the transaction it *would* create. Nothing
+is written anywhere. Use this to confirm the amounts and categories look right.
+
+**Step 2 — preview the import without writing (needs the `ACTUAL_*` values):**
+
+```bash
+npm run scan -- path/to/receipt.jpg --account "Checking" --import --dry-run
+```
+
+`"Checking"` is the **name of the account** in Actual you want the receipt to go
+into (the tool matches it case-insensitively, or you can pass an account id).
+`--dry-run` connects to Actual and validates everything but writes nothing.
+
+**Step 3 — do it for real:**
+
+```bash
+npm run scan -- path/to/receipt.jpg --account "Checking" --import
+```
+
+Re-running the same receipt will **not** create a duplicate (each transaction
+gets a stable id derived from merchant + date + total).
+
+---
+
+## All options
 
 | Flag | Description |
 | --- | --- |
 | `--account <nameOrId>` | Actual account to import into (required with `--import`). |
-| `--import` | Import the results directly into Actual. |
+| `--import` | Import the results directly into Actual (needs a sync server). |
 | `--json <path>` | Write the built transaction(s) to a JSON file. |
-| `--csv <path>` | Write a flat CSV of line items (for manual review). |
+| `--csv <path>` | Write a flat CSV of line items (for manual review only). |
 | `--no-group` | Keep one split per line item instead of grouping by category. |
 | `--dry-run` | With `--import`, preview without writing. |
 
+Multiple files at once:
+
+```bash
+npm run scan -- receipts/*.jpg --account "Checking" --import
+```
+
 Supported inputs: `.pdf`, `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.avif`.
 
-## Notes
+---
 
-- **Duplicates**: each transaction gets a stable `imported_id` derived from
-  merchant + date + total, so re-importing the same receipt won't duplicate it.
+## Tests
+
+The transaction-building logic (splitting, category grouping, balancing) is
+covered by unit tests that need no network and no API key:
+
+```bash
+npm test
+```
+
+---
+
+## Good to know
+
+- **Duplicates**: the stable `imported_id` (merchant + date + total) stops the
+  same receipt being imported twice.
 - **Amounts**: expenses are stored as negative integer cents (2-decimal
   currencies). The auto-balancing split guarantees the parent total matches what
-  you actually paid, even when tax/rounding/discounts don't appear as line items.
+  you actually paid, even when tax/rounding/discounts aren't itemized.
 - **The CSV output is for review only.** Importing that CSV into Actual would
   recreate the "one row per split" problem — use `--import` or the JSON for real
   splits.
 - **Models**: OCR uses `mistral-ocr-latest`; extraction defaults to
-  `mistral-small-latest` (override with `MISTRAL_TEXT_MODEL`).
+  `mistral-small-latest` (override with `MISTRAL_TEXT_MODEL` in `.env`).
+- **Privacy**: your receipt images and their text are sent to Mistral for
+  processing. Don't scan documents you're not comfortable sending to a
+  third-party API.
