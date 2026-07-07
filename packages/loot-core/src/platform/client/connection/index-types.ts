@@ -10,13 +10,15 @@ export type Init = typeof init;
 
 /** Error shape posted by the backend when a handler rejects. */
 export type ConnectionError = {
-  type: 'APIError' | 'ServerError';
-  message: string;
   /** Stable, machine-readable failure code (e.g. 'network-failure') */
   code?: string;
   name?: string;
   cause?: unknown;
-};
+} & (
+  | { type: 'APIError'; message: string }
+  // A ServerError can be built from a rejection without a message
+  | { type: 'ServerError'; message?: string }
+);
 
 /**
  * Send a command to the browser server.

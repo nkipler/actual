@@ -116,7 +116,7 @@ The engine uses `SharedArrayBuffer`, so the page that runs the API must be serve
 
 ## Handling Errors
 
-When an API method fails, the rejected error always carries a human-readable `message` in English. For the most common connection and download failures, the error also carries a stable, machine-readable `code`. Use `code` when your app needs to react to a specific kind of failure (for example, to show its own translated message) — matching on the text of `message` is fragile because the wording can change between releases.
+When an API method fails, the rejected error usually carries a human-readable `message` in English. For the most common connection and download failures, the error also carries a stable, machine-readable `code`. Use `code` when your app needs to react to a specific kind of failure (for example, to show its own translated message) — matching on the text of `message` is fragile because the wording can change between releases.
 
 ```js
 try {
