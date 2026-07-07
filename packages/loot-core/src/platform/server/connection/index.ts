@@ -4,7 +4,7 @@ import { logger } from '#platform/server/log';
 import { APIError } from '#server/errors';
 import { isMutating, runHandler } from '#server/mutators';
 
-import { coerceError, postError } from './errors';
+import { postErrorReply } from './errors';
 import type * as T from './index-types';
 
 function getGlobalObject() {
@@ -59,34 +59,11 @@ export const init: T.Init = function (serverChn, handlers) {
             });
           },
           nativeError => {
-            const error = coerceError(nativeError);
-            const post = message => serverChannel.postMessage(message);
-
-            if (name.startsWith('api/')) {
-              // The API is newer and does automatically forward
-              // errors
-              postError(
-                post,
-                err => ({ type: 'reply', id, error: err }),
-                error,
-              );
-            } else if (catchErrors) {
-              postError(
-                post,
-                err => ({
-                  type: 'reply',
-                  id,
-                  result: { error: err, data: null },
-                }),
-                error,
-              );
-            } else {
-              postError(
-                post,
-                err => ({ type: 'error', id, error: err }),
-                error,
-              );
-            }
+            const error = postErrorReply(
+              message => serverChannel.postMessage(message),
+              { id, name, catchErrors },
+              nativeError,
+            );
 
             // Only report internal errors
             if (error.type === 'ServerError') {

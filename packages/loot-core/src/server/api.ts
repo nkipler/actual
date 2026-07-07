@@ -316,8 +316,7 @@ handlers['api/bank-sync'] = async function (args) {
 
   const errors = allErrors.filter(e => e != null);
   if (errors.length > 0) {
-    const error = new Error(getBankSyncError(errors[0]));
-    throw errors[0].code ? withErrorCode(error, errors[0].code) : error;
+    throw withErrorCode(new Error(getBankSyncError(errors[0])), errors[0].code);
   }
 };
 

@@ -99,9 +99,9 @@ export function APIError(
  */
 export function withErrorCode<E extends Error>(
   error: E,
-  code: string,
-): E & { code: string } {
-  return Object.assign(error, { code });
+  code: string | undefined,
+): E & { code?: string } {
+  return code == null ? error : Object.assign(error, { code });
 }
 
 export function FileDownloadError(

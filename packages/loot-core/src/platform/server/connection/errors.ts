@@ -7,12 +7,11 @@ export type TransferableError = {
   code?: string;
   name?: string;
   stack?: string;
-  meta?: unknown;
   cause?: unknown;
 };
 
 function getField(error: unknown, field: string): unknown {
-  return typeof error === 'object' && error !== null && field in error
+  return typeof error === 'object' && error !== null
     ? (error as Record<string, unknown>)[field]
     : undefined;
 }
@@ -40,48 +39,61 @@ function getErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-export function coerceError(error: unknown): TransferableError {
-  const code = getErrorCode(error);
-
+function coerceError(error: unknown): TransferableError {
   if (getField(error, 'type') === 'APIError') {
-    const apiError = error as TransferableError;
-    return code == null ? apiError : { ...apiError, code };
+    return error as TransferableError;
   }
 
   return {
     type: 'ServerError',
     message: getStringField(error, 'message'),
-    code,
+    code: getErrorCode(error),
     name: getStringField(error, 'name'),
     cause: error,
   };
 }
 
 // A reduced shape that is always structured-cloneable: `cause` (the original
-// error) and `meta` are dropped, everything kept is a plain string.
-export function toCloneableError(error: TransferableError): TransferableError {
+// error) is dropped, everything kept is a plain string.
+function toCloneableError(error: TransferableError): TransferableError {
   return {
     type: error.type,
     message: error.message,
     code: error.code,
-    name: getStringField(error.cause, 'name') ?? error.name,
-    stack: getStringField(error.cause, 'stack') ?? error.stack,
+    name: error.name,
+    stack: getStringField(error.cause, 'stack'),
   };
 }
 
-// Post an error reply, falling back to the reduced cloneable shape if the
-// structured clone fails. Without this, an error holding a non-cloneable
-// value (e.g. an Emscripten ErrnoError, which carries methods) makes
-// `postMessage` throw a DataCloneError in the worker — and the consumer sees
-// that clone failure instead of the real cause.
-export function postError(
+// Post a rejected handler result in the envelope the request expects, and
+// return the serialized error for the caller's reporting. If the structured
+// clone inside `post` fails — the error held a non-cloneable value, e.g. an
+// Emscripten ErrnoError carrying methods — retry with a plain, always
+// cloneable shape so the real failure isn't replaced by a DataCloneError.
+export function postErrorReply(
   post: (message: unknown) => void,
-  buildMessage: (error: TransferableError) => unknown,
-  error: TransferableError,
-): void {
+  request: { id: unknown; name: string; catchErrors?: boolean },
+  rejection: unknown,
+): TransferableError {
+  const { id, name, catchErrors } = request;
+  const error = coerceError(rejection);
+
+  function buildMessage(err: TransferableError) {
+    if (name.startsWith('api/')) {
+      // The API is newer and does automatically forward errors
+      return { type: 'reply', id, error: err };
+    }
+    if (catchErrors) {
+      return { type: 'reply', id, result: { error: err, data: null } };
+    }
+    return { type: 'error', id, error: err };
+  }
+
   try {
     post(buildMessage(error));
   } catch {
     post(buildMessage(toCloneableError(error)));
   }
+
+  return error;
 }
