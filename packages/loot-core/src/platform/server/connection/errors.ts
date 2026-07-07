@@ -1,9 +1,3 @@
-// Helpers for sending rejected handler errors across the worker/process
-// boundary. `postMessage` structured-clones the payload, which strips custom
-// fields (like `reason`) from Error instances — so the machine-readable
-// failure code has to be lifted onto the plain envelope object before
-// posting, or consumers only ever see the English `message`.
-
 export type TransferableError = {
   type: string;
   message?: string;
