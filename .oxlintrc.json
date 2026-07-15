@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["tools/**"],
   "plugins": ["react", "typescript", "import", "jsx-a11y"],
   "jsPlugins": [
     "./packages/eslint-plugin-actual/lib/index.js",

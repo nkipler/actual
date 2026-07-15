@@ -1,0 +1,30 @@
+{
+  "name": "actual-receipt-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Scan receipts (photo/PDF), run them through Mistral OCR, and import them into Actual Budget as split transactions.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "receipt-scan": "./src/index.ts"
+  },
+  "scripts": {
+    "scan": "tsx src/index.ts",
+    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "dependencies": {
+    "@actual-app/api": ">=25.0.0",
+    "@mistralai/mistralai": "^1.5.0",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}
